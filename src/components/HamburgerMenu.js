@@ -89,6 +89,14 @@ export default function HamburgerMenu({ navigation }) {
 
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => handleNavigate("NutritionLookup")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemText}>🔍 Nutrition Lookup</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => handleNavigate("Settings")}
               activeOpacity={0.7}
             >

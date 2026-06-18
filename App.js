@@ -28,6 +28,7 @@ import RestaurantDetailsScreen from "./src/screens/RestaurantDetailsScreen";
 import FavoritesScreen from "./src/screens/FavoritesScreen";
 import FoodDiaryScreen from "./src/screens/FoodDiaryScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import NutritionLookupScreen from "./src/screens/NutritionLookupScreen";
 
 // Create a stack navigator instance
 const Stack = createNativeStackNavigator();
@@ -74,6 +75,11 @@ export default function App() {
             name="Settings"
             component={SettingsScreen}
             options={{ title: "Settings" }}
+          />
+          <Stack.Screen
+            name="NutritionLookup"
+            component={NutritionLookupScreen}
+            options={{ title: "Nutrition Lookup" }}
           />
         </Stack.Navigator>
       </NavigationContainer>

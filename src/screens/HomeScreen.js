@@ -1,7 +1,7 @@
 /*
   --- SCREEN: HomeScreen ---
   The landing screen preserving the original Better Choices branding.
-  Uses TouchableOpacity for navigation buttons to other screens.
+  Navigation is handled by the hamburger menu in the Header.
 */
 
 import { useState, useEffect } from "react";
@@ -21,7 +21,8 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <Header />
+      {/* Header with hamburger menu for navigation */}
+      <Header navigation={navigation} />
 
       <View style={styles.section}>
         <Text style={styles.description}>
@@ -29,22 +30,6 @@ export default function HomeScreen({ navigation }) {
           cooking meals at home. Better Choices helps users make healthier
           decisions when fast food is the most practical option.
         </Text>
-      </View>
-
-      {/* Navigation buttons */}
-      <View style={styles.navRow}>
-        <TouchableOpacity
-          style={styles.navButton}
-          onPress={() => navigation.navigate("Restaurants")}
-        >
-          <Text style={styles.navButtonText}>🍽️ All Restaurants</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navButton}
-          onPress={() => navigation.navigate("Favorites")}
-        >
-          <Text style={styles.navButtonText}>❤️ Favorites</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Healthy Pick of the Day */}
@@ -115,17 +100,5 @@ const styles = StyleSheet.create({
   },
   pickName: { fontSize: 20, fontWeight: "700", color: "#1f8a5c", marginBottom: 8 },
   pickDetail: { fontSize: 15, color: "#2d1050", marginBottom: 4 },
-  navRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  navButton: {
-    backgroundColor: "#5b2d8e",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  navButtonText: { color: "#ffffff", fontWeight: "700", fontSize: 15 },
+
 });

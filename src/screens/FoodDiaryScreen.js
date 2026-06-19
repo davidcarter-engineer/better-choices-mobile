@@ -1,32 +1,27 @@
 /*
   --- SCREEN: FoodDiaryScreen ---
-  Allows users to log meals and track daily calories.
+  A persistent Food Diary with calendar view and AsyncStorage.
 
-  --- TextInput ---
-  TextInput is React Native's form input component (like <input> in web).
-  It accepts user text and fires onChangeText when the value changes.
-  keyboardType="numeric" shows a number pad for calorie input.
+  --- AsyncStorage ---
+  On mount, we load saved meals from AsyncStorage into Redux.
+  This ensures data persists between app sessions without a backend.
 
-  --- Controlled Inputs ---
-  A controlled input is one whose value is driven by component state.
-  We store the input value in useState and update it via onChangeText.
-  This gives us full control over the value for validation and clearing.
+  --- Data Persistence ---
+  Meals are saved to AsyncStorage automatically when added or removed
+  (handled in the foodDiarySlice). On app start, loadMealsFromStorage
+  reads the data and dispatches loadMeals to populate Redux state.
 
-  --- useState ---
-  useState is a React hook that adds local state to a function component.
-  It returns [currentValue, setterFunction]. Each call to the setter
-  triggers a re-render with the new value.
+  --- Redux Integration ---
+  We use useSelector to read entries and useDispatch to add/remove meals.
+  The slice handles both Redux state updates and AsyncStorage persistence.
 
-  --- Form Validation ---
-  Before saving, we check that no fields are empty and that calories
-  is a valid number. If validation fails, we show an error message.
-
-  --- FlatList ---
-  FlatList efficiently renders a scrollable list of meal entries.
-  It only renders visible items, making it performant for long lists.
+  --- Calendar Logic ---
+  Each meal has a date field. The calendar highlights days with entries.
+  Users can tap a day to filter and view only that day's meals.
+  Navigating months lets users review historical entries.
 */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -37,63 +32,153 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
-import { addMeal, removeMeal } from "../store/foodDiarySlice";
+import { addMeal, removeMeal, loadMeals, loadMealsFromStorage } from "../store/foodDiarySlice";
+import DiaryCalendar from "../components/DiaryCalendar";
+import MealCard from "../components/MealCard";
+
+// Get today's date as YYYY-MM-DD
+const getToday = () => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 
 export default function FoodDiaryScreen() {
-  // useState: local state for each form field (controlled inputs)
   const [mealName, setMealName] = useState("");
   const [foodItem, setFoodItem] = useState("");
   const [calories, setCalories] = useState("");
   const [error, setError] = useState("");
+  const [selectedDate, setSelectedDate] = useState(getToday());
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+
+  // Quick Calorie Lookup state
+  const [lookupQuery, setLookupQuery] = useState("");
+  const [lookupResults, setLookupResults] = useState([]);
+  const [lookupLoading, setLookupLoading] = useState(false);
 
   const dispatch = useDispatch();
-  const entries = useSelector((state) => state.foodDiary.entries);
-  const totalCalories = useSelector((state) => state.foodDiary.totalCalories);
+  const allEntries = useSelector((state) => state.foodDiary.entries);
+
+  // Load saved meals from AsyncStorage on mount
+  useEffect(() => {
+    const load = async () => {
+      const saved = await loadMealsFromStorage();
+      if (saved.length > 0) {
+        dispatch(loadMeals(saved));
+      }
+    };
+    load();
+  }, [dispatch]);
+
+  // Filter entries for the selected date
+  const dailyEntries = allEntries.filter((e) => e.date === selectedDate);
+  const dailyCalories = dailyEntries.reduce((sum, e) => sum + e.calories, 0);
+
+  // Get unique dates that have entries (for calendar highlighting)
+  const datesWithEntries = [...new Set(allEntries.map((e) => e.date))];
+
+  // Calendar navigation
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
 
   const handleSaveMeal = () => {
-    // Form Validation: check for empty fields
     if (!mealName.trim() || !foodItem.trim() || !calories.trim()) {
       setError("All fields are required.");
       return;
     }
 
-    // Form Validation: calories must be a valid number
     const cal = Number(calories);
     if (isNaN(cal) || cal <= 0) {
       setError("Calories must be a valid number.");
       return;
     }
 
-    // Dispatch addMeal action to Redux store
     dispatch(
       addMeal({
         id: Date.now().toString(),
         mealName: mealName.trim(),
         foodItem: foodItem.trim(),
         calories: cal,
+        date: selectedDate,
       })
     );
 
-    // Clear form and error
     setMealName("");
     setFoodItem("");
     setCalories("");
     setError("");
   };
 
+  // Quick Calorie Lookup using USDA API
+  const handleLookup = async () => {
+    if (!lookupQuery.trim()) return;
+    setLookupLoading(true);
+    setLookupResults([]);
+    try {
+      const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&query=${encodeURIComponent(lookupQuery)}&pageSize=5`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.foods && data.foods.length > 0) {
+        const results = data.foods.map((food) => {
+          const energy = food.foodNutrients.find((n) => n.nutrientName === "Energy");
+          return { name: food.description, calories: energy ? Math.round(energy.value) : 0 };
+        });
+        setLookupResults(results);
+      }
+    } catch {}
+    setLookupLoading(false);
+  };
+
+  const handleUseResult = (result) => {
+    setFoodItem(result.name);
+    setCalories(String(result.calories));
+    setLookupResults([]);
+    setLookupQuery("");
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={entries}
+        data={dailyEntries}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View>
             <Text style={styles.title}>🍽️ Food Diary</Text>
 
+            {/* Calendar View */}
+            <DiaryCalendar
+              currentMonth={currentMonth}
+              currentYear={currentYear}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+              onSelectDate={setSelectedDate}
+              selectedDate={selectedDate}
+              datesWithEntries={datesWithEntries}
+            />
+
+            {/* Selected date display */}
+            <Text style={styles.dateLabel}>📅 {selectedDate}</Text>
+
             {/* Meal entry form */}
             <View style={styles.form}>
-              {/* TextInput: controlled by mealName state */}
               <TextInput
                 style={styles.input}
                 placeholder="Meal Name (e.g. Breakfast)"
@@ -101,7 +186,6 @@ export default function FoodDiaryScreen() {
                 value={mealName}
                 onChangeText={setMealName}
               />
-              {/* TextInput: controlled by foodItem state */}
               <TextInput
                 style={styles.input}
                 placeholder="Food Item (e.g. Oatmeal)"
@@ -109,7 +193,6 @@ export default function FoodDiaryScreen() {
                 value={foodItem}
                 onChangeText={setFoodItem}
               />
-              {/* TextInput: numeric keyboard for calories */}
               <TextInput
                 style={styles.input}
                 placeholder="Calories (e.g. 300)"
@@ -119,45 +202,68 @@ export default function FoodDiaryScreen() {
                 keyboardType="numeric"
               />
 
-              {/* Validation error display */}
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
-              {/* Save Meal button */}
               <TouchableOpacity style={styles.button} onPress={handleSaveMeal}>
                 <Text style={styles.buttonText}>Save Meal</Text>
               </TouchableOpacity>
             </View>
 
+            {/* Quick Calorie Lookup */}
+            <View style={styles.lookupCard}>
+              <Text style={styles.lookupTitle}>🔍 Quick Calorie Lookup</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Search a food..."
+                placeholderTextColor="#999"
+                value={lookupQuery}
+                onChangeText={setLookupQuery}
+              />
+              <TouchableOpacity
+                style={styles.button}
+                onPress={handleLookup}
+                disabled={lookupLoading}
+              >
+                <Text style={styles.buttonText}>
+                  {lookupLoading ? "Searching..." : "Look Up"}
+                </Text>
+              </TouchableOpacity>
+              {lookupResults.map((result, index) => (
+                <View key={index} style={styles.lookupResult}>
+                  <View style={styles.lookupInfo}>
+                    <Text style={styles.lookupName} numberOfLines={1}>{result.name}</Text>
+                    <Text style={styles.lookupCal}>{result.calories} cal</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.useButton}
+                    onPress={() => handleUseResult(result)}
+                  >
+                    <Text style={styles.useButtonText}>Use</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+
             {/* Daily Total Calories */}
             <View style={styles.totalCard}>
               <Text style={styles.totalText}>
-                🔥 Daily Total: {totalCalories} calories
+                🔥 Daily Total: {dailyCalories} calories
               </Text>
             </View>
 
-            {entries.length > 0 && (
-              <Text style={styles.sectionTitle}>Logged Meals</Text>
+            {dailyEntries.length > 0 && (
+              <Text style={styles.sectionTitle}>Meals on {selectedDate}</Text>
             )}
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View>
-              <Text style={styles.cardMeal}>{item.mealName}</Text>
-              <Text style={styles.cardDetail}>🥗 {item.foodItem}</Text>
-              <Text style={styles.cardDetail}>🔥 {item.calories} calories</Text>
-            </View>
-            {/* Delete Meal button */}
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => dispatch(removeMeal({ id: item.id }))}
-            >
-              <Text style={styles.deleteText}>Delete</Text>
-            </TouchableOpacity>
-          </View>
+          <MealCard
+            item={item}
+            onDelete={() => dispatch(removeMeal({ id: item.id }))}
+          />
         )}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No meals logged yet.</Text>
+          <Text style={styles.emptyText}>No meals logged for this date.</Text>
         }
       />
     </SafeAreaView>
@@ -170,6 +276,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
+    color: "#5b2d8e",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  dateLabel: {
+    fontSize: 16,
+    fontWeight: "600",
     color: "#5b2d8e",
     textAlign: "center",
     marginBottom: 16,
@@ -209,28 +322,34 @@ const styles = StyleSheet.create({
     color: "#5b2d8e",
     marginBottom: 12,
   },
-  card: {
+
+  emptyText: { textAlign: "center", color: "#999", fontSize: 14, marginTop: 12 },
+  lookupCard: {
     backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#e4d8f0",
-    shadowColor: "#3c0e5a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 20,
   },
-  cardMeal: { fontSize: 16, fontWeight: "700", color: "#1f8a5c", marginBottom: 4 },
-  cardDetail: { fontSize: 14, color: "#2d1050", marginBottom: 2 },
-  deleteButton: {
-    marginTop: 10,
-    backgroundColor: "#e74c3c",
-    paddingVertical: 8,
-    borderRadius: 6,
+  lookupTitle: { fontSize: 16, fontWeight: "700", color: "#5b2d8e", marginBottom: 12 },
+  lookupResult: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#f0e8f7",
+    marginTop: 8,
   },
-  deleteText: { color: "#ffffff", fontWeight: "600" },
-  emptyText: { textAlign: "center", color: "#999", fontSize: 14, marginTop: 12 },
+  lookupInfo: { flex: 1, marginRight: 10 },
+  lookupName: { fontSize: 13, color: "#2d1050" },
+  lookupCal: { fontSize: 12, color: "#666" },
+  useButton: {
+    backgroundColor: "#1f8a5c",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  useButtonText: { color: "#ffffff", fontWeight: "600", fontSize: 12 },
 });

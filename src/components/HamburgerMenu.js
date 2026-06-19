@@ -97,6 +97,30 @@ export default function HamburgerMenu({ navigation }) {
 
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => handleNavigate("Contact")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemText}>📬 Contact Us</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleNavigate("About")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemText}>ℹ️ About</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleNavigate("Disclaimer")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemText}>⚠️ Disclaimer</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => handleNavigate("Settings")}
               activeOpacity={0.7}
             >

@@ -1,14 +1,7 @@
 /*
   --- SCREEN: FavoritesScreen ---
-  Displays all saved favorite restaurants from the Redux store.
-
-  --- useSelector ---
-  We use useSelector here to read the favorites array from the store.
-  Whenever a favorite is added or removed, this component automatically
-  re-renders with the updated list.
-
-  --- useDispatch ---
-  We use useDispatch to allow removing favorites directly from this screen.
+  Displays saved favorites from Redux, matching the web application.
+  Favorites can come from restaurants or nutrition lookup.
 */
 
 import {
@@ -23,19 +16,16 @@ import { useSelector, useDispatch } from "react-redux";
 import { removeFavorite } from "../store/favoritesSlice";
 
 export default function FavoritesScreen({ navigation }) {
-  // useSelector: read favorites from the Redux store
   const favorites = useSelector((state) => state.favorites.favorites);
-
-  // useDispatch: get dispatch to send removeFavorite actions
   const dispatch = useDispatch();
 
   if (favorites.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No favorites saved yet.</Text>
+          <Text style={styles.emptyText}>No favorites yet.</Text>
           <Text style={styles.emptySubtext}>
-            Browse restaurants and tap ❤️ to save them here.
+            Go to Restaurants or Nutrition Lookup and save some!
           </Text>
         </View>
       </SafeAreaView>
@@ -44,29 +34,35 @@ export default function FavoritesScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>❤️ My Favorites</Text>
+      <Text style={styles.title}>⭐ My Favorites</Text>
       <FlatList
         data={favorites}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id || item.name}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("RestaurantDetails", { restaurant: item })
-              }
-            >
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.detail}>
-                ⭐ Health Score: {item.healthyScore}/10
-              </Text>
-              <Text style={styles.detail}>
-                🥗 {item.recommendedMeal} · 🔥 {item.calories} cal
-              </Text>
-            </TouchableOpacity>
+            <Text style={styles.name}>{item.name}</Text>
+            {item.restaurant && (
+              <Text style={styles.detail}>🏪 {item.restaurant}</Text>
+            )}
+            {item.calories !== undefined && (
+              <Text style={styles.detail}>🔥 {item.calories} calories</Text>
+            )}
+            {item.protein !== undefined && (
+              <Text style={styles.detail}>💪 Protein: {item.protein}g</Text>
+            )}
+            {item.carbs !== undefined && (
+              <Text style={styles.detail}>🍞 Carbs: {item.carbs}g</Text>
+            )}
+            {item.fat !== undefined && (
+              <Text style={styles.detail}>🧈 Fat: {item.fat}g</Text>
+            )}
+            {item.healthyScore !== undefined && (
+              <Text style={styles.detail}>⭐ Score: {item.healthyScore}/10</Text>
+            )}
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() => dispatch(removeFavorite({ id: item.id }))}
+              onPress={() => dispatch(removeFavorite({ name: item.name }))}
             >
               <Text style={styles.removeText}>Remove</Text>
             </TouchableOpacity>
@@ -101,7 +97,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  name: { fontSize: 18, fontWeight: "700", color: "#1f8a5c", marginBottom: 6 },
+  name: { fontSize: 17, fontWeight: "700", color: "#1f8a5c", marginBottom: 6 },
   detail: { fontSize: 14, color: "#2d1050", marginBottom: 3 },
   removeButton: {
     marginTop: 10,

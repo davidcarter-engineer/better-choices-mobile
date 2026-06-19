@@ -1,28 +1,16 @@
 /*
   --- SCREEN: NutritionLookupScreen ---
-  Allows users to search for food items using the USDA FoodData Central API.
+  Searches USDA FoodData Central API matching the web application.
+  Shows up to 5 results with save-to-favorites on each.
 
   --- Alerts ---
-  Alert.alert() displays a native dialog box on the device.
-  Used here for: empty search field, food not found, and API errors.
-  Alert is non-blocking and provides a simple way to communicate with users.
+  Alert.alert() for empty search, no results, and API errors.
 
   --- Animations ---
-  React Native's Animated API creates smooth visual transitions.
-  We use Animated.Value to track opacity (0 = invisible, 1 = visible).
-  Animated.timing() transitions the value over a duration with easing.
-  The result card fades in when nutrition data loads.
+  Animated.timing fades in results when data loads.
 
   --- Gestures ---
-  We use PanResponder to detect swipe gestures on the result card.
-  PanResponder listens for touch start, move, and release events.
-  When the user swipes left (dx < -100), we clear the result card.
-
-  --- API Requests / Async-Await ---
-  fetch() makes HTTP requests to external APIs.
-  async/await lets us write asynchronous code that reads like synchronous code.
-  await pauses execution until the Promise resolves, keeping code readable.
-  We wrap API calls in try/catch to handle network errors gracefully.
+  PanResponder detects left swipe to clear all results.
 */
 
 import { useState, useRef } from "react";
@@ -37,35 +25,34 @@ import {
   PanResponder,
   StyleSheet,
 } from "react-native";
+import { useSelector, useDispatch } from "react-redux";
+import { addFavorite } from "../store/favoritesSlice";
 
-// USDA FoodData Central API key and endpoint
 const API_KEY = "DEMO_KEY";
 const API_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 
 export default function NutritionLookupScreen() {
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState(null);
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Animated value for fade-in effect (0 = hidden, 1 = fully visible)
+  const dispatch = useDispatch();
+  const favorites = useSelector((state) => state.favorites.favorites);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // PanResponder: detects horizontal swipe gestures on the result card
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        Math.abs(gestureState.dx) > 20,
-      onPanResponderRelease: (_, gestureState) => {
-        // If user swipes left more than 100px, clear the result
-        if (gestureState.dx < -100) {
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 20,
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dx < -100) {
           fadeAnim.setValue(0);
-          setResult(null);
+          setResults([]);
         }
       },
     })
   ).current;
 
-  // Fade in the result card
   const fadeIn = () => {
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, {
@@ -75,114 +62,136 @@ export default function NutritionLookupScreen() {
     }).start();
   };
 
-  // Search the USDA API for nutrition data
   const handleSearch = async () => {
-    // Alert: empty search field validation
     if (!query.trim()) {
       Alert.alert("Empty Search", "Please enter a food name to search.");
       return;
     }
 
     setLoading(true);
-    setResult(null);
+    setResults([]);
 
     try {
-      // async/await: fetch pauses here until the API responds
       const response = await fetch(
-        `${API_URL}?api_key=${API_KEY}&query=${encodeURIComponent(query.trim())}&pageSize=1`
+        `${API_URL}?api_key=${API_KEY}&query=${encodeURIComponent(query.trim())}&pageSize=5`
       );
 
-      if (!response.ok) {
-        throw new Error("API request failed");
-      }
+      if (!response.ok) throw new Error("API request failed");
 
       const data = await response.json();
 
       if (!data.foods || data.foods.length === 0) {
-        // Alert: food not found
         Alert.alert("Not Found", `No results found for "${query.trim()}".`);
         setLoading(false);
         return;
       }
 
-      const food = data.foods[0];
-      const nutrients = food.foodNutrients || [];
+      const parsed = data.foods.map((food) => {
+        const getNutrient = (name) => {
+          const n = food.foodNutrients.find((item) =>
+            item.nutrientName?.includes(name)
+          );
+          return n ? Math.round(n.value) : 0;
+        };
 
-      // Extract specific nutrients by name
-      const getNutrient = (name) => {
-        const n = nutrients.find((item) => item.nutrientName?.includes(name));
-        return n ? Math.round(n.value) : 0;
-      };
-
-      setResult({
-        name: food.description,
-        calories: getNutrient("Energy"),
-        protein: getNutrient("Protein"),
-        carbs: getNutrient("Carbohydrate"),
-        fat: getNutrient("Total lipid"),
+        return {
+          name: food.description,
+          calories: getNutrient("Energy"),
+          protein: getNutrient("Protein"),
+          carbs: getNutrient("Carbohydrate"),
+          fat: getNutrient("Total lipid"),
+        };
       });
 
-      // Trigger fade-in animation for the result card
+      setResults(parsed);
       fadeIn();
-    } catch (error) {
-      // Alert: API request failure
+    } catch {
       Alert.alert("Error", "Failed to fetch nutrition data. Please try again.");
     }
 
     setLoading(false);
   };
 
+  const handleClear = () => {
+    setQuery("");
+    setResults([]);
+    fadeAnim.setValue(0);
+  };
+
+  const isFavorite = (name) => favorites.some((f) => f.name === name);
+
+  const handleSave = (food) => {
+    dispatch(
+      addFavorite({
+        id: `nutrition-${food.name}`,
+        name: food.name,
+        calories: food.calories,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+      })
+    );
+  };
+
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>🔍 Nutrition Lookup</Text>
       <Text style={styles.subtitle}>
-        Search for any food to view its nutrition info.
+        Search the USDA database for nutritional information.
       </Text>
 
       {/* Search form */}
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Enter food name (e.g. Turkey Sandwich)"
+          placeholder="e.g., grilled chicken breast"
           placeholderTextColor="#999"
           value={query}
           onChangeText={setQuery}
         />
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleSearch}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? "Searching..." : "Search"}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleSearch}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? "Searching..." : "Search"}
+            </Text>
+          </TouchableOpacity>
+          {results.length > 0 && (
+            <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
+              <Text style={styles.clearButtonText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* Result card with fade-in animation and swipe-to-clear gesture */}
-      {result && (
-        <Animated.View
-          style={[styles.resultCard, { opacity: fadeAnim }]}
-          {...panResponder.panHandlers}
-        >
-          <Text style={styles.resultName}>{result.name}</Text>
-          <View style={styles.nutrientRow}>
-            <Text style={styles.nutrientLabel}>🔥 Calories</Text>
-            <Text style={styles.nutrientValue}>{result.calories} kcal</Text>
-          </View>
-          <View style={styles.nutrientRow}>
-            <Text style={styles.nutrientLabel}>💪 Protein</Text>
-            <Text style={styles.nutrientValue}>{result.protein} g</Text>
-          </View>
-          <View style={styles.nutrientRow}>
-            <Text style={styles.nutrientLabel}>🍞 Carbohydrates</Text>
-            <Text style={styles.nutrientValue}>{result.carbs} g</Text>
-          </View>
-          <View style={styles.nutrientRow}>
-            <Text style={styles.nutrientLabel}>🧈 Fat</Text>
-            <Text style={styles.nutrientValue}>{result.fat} g</Text>
-          </View>
-          <Text style={styles.swipeHint}>← Swipe left to clear</Text>
+      {/* Results with fade-in and swipe-to-clear */}
+      {results.length > 0 && (
+        <Animated.View style={{ opacity: fadeAnim }} {...panResponder.panHandlers}>
+          <Text style={styles.resultsTitle}>Results</Text>
+          {results.map((food, index) => (
+            <View key={index} style={styles.resultCard}>
+              <Text style={styles.resultName}>{food.name}</Text>
+              <View style={styles.nutrientGrid}>
+                <Text style={styles.nutrient}>🔥 {food.calories} cal</Text>
+                <Text style={styles.nutrient}>💪 {food.protein}g protein</Text>
+                <Text style={styles.nutrient}>🍞 {food.carbs}g carbs</Text>
+                <Text style={styles.nutrient}>🧈 {food.fat}g fat</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.saveButton, isFavorite(food.name) && styles.savedButton]}
+                onPress={() => handleSave(food)}
+                disabled={isFavorite(food.name)}
+              >
+                <Text style={styles.saveButtonText}>
+                  {isFavorite(food.name) ? "✓ Saved" : "♡ Save to Favorites"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <Text style={styles.swipeHint}>← Swipe left to clear results</Text>
         </Animated.View>
       )}
     </ScrollView>
@@ -199,12 +208,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 24,
-  },
+  subtitle: { fontSize: 14, color: "#666", textAlign: "center", marginBottom: 24 },
   form: { marginBottom: 24 },
   input: {
     backgroundColor: "#ffffff",
@@ -216,17 +220,29 @@ const styles = StyleSheet.create({
     color: "#2d1050",
     marginBottom: 12,
   },
+  buttonRow: { flexDirection: "row", gap: 12 },
   button: {
+    flex: 1,
     backgroundColor: "#5b2d8e",
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: "center",
   },
   buttonText: { color: "#ffffff", fontWeight: "700", fontSize: 16 },
+  clearButton: {
+    backgroundColor: "#e4d8f0",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  clearButtonText: { color: "#5b2d8e", fontWeight: "700", fontSize: 16 },
+  resultsTitle: { fontSize: 18, fontWeight: "700", color: "#5b2d8e", marginBottom: 12 },
   resultCard: {
     backgroundColor: "#ffffff",
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#e4d8f0",
     shadowColor: "#3c0e5a",
@@ -235,26 +251,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  resultName: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1f8a5c",
-    marginBottom: 16,
-    textTransform: "capitalize",
+  resultName: { fontSize: 16, fontWeight: "700", color: "#1f8a5c", marginBottom: 10 },
+  nutrientGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  nutrient: { width: "50%", fontSize: 14, color: "#2d1050", marginBottom: 4 },
+  saveButton: {
+    backgroundColor: "#5b2d8e",
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: "center",
   },
-  nutrientRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0e8f7",
-  },
-  nutrientLabel: { fontSize: 16, color: "#2d1050" },
-  nutrientValue: { fontSize: 16, fontWeight: "600", color: "#5b2d8e" },
-  swipeHint: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "center",
-    marginTop: 12,
-  },
+  savedButton: { backgroundColor: "#a0a0a0" },
+  saveButtonText: { color: "#ffffff", fontWeight: "600", fontSize: 14 },
+  swipeHint: { fontSize: 12, color: "#999", textAlign: "center", marginTop: 8 },
 });

@@ -29,6 +29,9 @@ import FavoritesScreen from "./src/screens/FavoritesScreen";
 import FoodDiaryScreen from "./src/screens/FoodDiaryScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import NutritionLookupScreen from "./src/screens/NutritionLookupScreen";
+import ContactScreen from "./src/screens/ContactScreen";
+import AboutScreen from "./src/screens/AboutScreen";
+import DisclaimerScreen from "./src/screens/DisclaimerScreen";
 
 // Create a stack navigator instance
 const Stack = createNativeStackNavigator();
@@ -80,6 +83,21 @@ export default function App() {
             name="NutritionLookup"
             component={NutritionLookupScreen}
             options={{ title: "Nutrition Lookup" }}
+          />
+          <Stack.Screen
+            name="Contact"
+            component={ContactScreen}
+            options={{ title: "Contact Us" }}
+          />
+          <Stack.Screen
+            name="About"
+            component={AboutScreen}
+            options={{ title: "About" }}
+          />
+          <Stack.Screen
+            name="Disclaimer"
+            component={DisclaimerScreen}
+            options={{ title: "Disclaimer" }}
           />
         </Stack.Navigator>
       </NavigationContainer>

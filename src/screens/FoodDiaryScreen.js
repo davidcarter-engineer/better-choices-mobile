@@ -1,24 +1,7 @@
 /*
   --- SCREEN: FoodDiaryScreen ---
-  A persistent Food Diary with calendar view and AsyncStorage.
-
-  --- AsyncStorage ---
-  On mount, we load saved meals from AsyncStorage into Redux.
-  This ensures data persists between app sessions without a backend.
-
-  --- Data Persistence ---
-  Meals are saved to AsyncStorage automatically when added or removed
-  (handled in the foodDiarySlice). On app start, loadMealsFromStorage
-  reads the data and dispatches loadMeals to populate Redux state.
-
-  --- Redux Integration ---
-  We use useSelector to read entries and useDispatch to add/remove meals.
-  The slice handles both Redux state updates and AsyncStorage persistence.
-
-  --- Calendar Logic ---
-  Each meal has a date field. The calendar highlights days with entries.
-  Users can tap a day to filter and view only that day's meals.
-  Navigating months lets users review historical entries.
+  Food Diary backed by the Better Choices API (MongoDB).
+  Entries sync between web and mobile for the same user account.
 */
 
 import { useState, useEffect } from "react";
@@ -29,27 +12,21 @@ import {
   FlatList,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
-import { addMeal, removeMeal, loadMeals, loadMealsFromStorage } from "../store/foodDiarySlice";
+import { fetchDiaryEntries, addMealAPI, removeMealAPI, setSelectedDate } from "../store/foodDiarySlice";
 import DiaryCalendar from "../components/DiaryCalendar";
-import MealCard from "../components/MealCard";
 
-// Get today's date as YYYY-MM-DD
-const getToday = () => {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-};
+const API_KEY = "DEMO_KEY";
+const USDA_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 
 export default function FoodDiaryScreen() {
   const [mealName, setMealName] = useState("");
   const [foodItem, setFoodItem] = useState("");
   const [calories, setCalories] = useState("");
   const [error, setError] = useState("");
-  const [selectedDate, setSelectedDate] = useState(getToday());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
@@ -59,25 +36,19 @@ export default function FoodDiaryScreen() {
   const [lookupLoading, setLookupLoading] = useState(false);
 
   const dispatch = useDispatch();
-  const allEntries = useSelector((state) => state.foodDiary.entries);
+  const { entries, selectedDate, loading } = useSelector((state) => state.foodDiary);
 
-  // Load saved meals from AsyncStorage on mount
+  // Fetch all diary entries from the API on mount
   useEffect(() => {
-    const load = async () => {
-      const saved = await loadMealsFromStorage();
-      if (saved.length > 0) {
-        dispatch(loadMeals(saved));
-      }
-    };
-    load();
+    dispatch(fetchDiaryEntries());
   }, [dispatch]);
 
   // Filter entries for the selected date
-  const dailyEntries = allEntries.filter((e) => e.date === selectedDate);
+  const dailyEntries = entries.filter((e) => e.date === selectedDate);
   const dailyCalories = dailyEntries.reduce((sum, e) => sum + e.calories, 0);
 
-  // Get unique dates that have entries (for calendar highlighting)
-  const datesWithEntries = [...new Set(allEntries.map((e) => e.date))];
+  // Get dates that have entries (for calendar highlighting)
+  const datesWithEntries = [...new Set(entries.map((e) => e.date))];
 
   // Calendar navigation
   const handlePrevMonth = () => {
@@ -111,12 +82,11 @@ export default function FoodDiaryScreen() {
     }
 
     dispatch(
-      addMeal({
-        id: Date.now().toString(),
+      addMealAPI({
+        date: selectedDate,
         mealName: mealName.trim(),
         foodItem: foodItem.trim(),
         calories: cal,
-        date: selectedDate,
       })
     );
 
@@ -126,13 +96,13 @@ export default function FoodDiaryScreen() {
     setError("");
   };
 
-  // Quick Calorie Lookup using USDA API
+  // Quick Calorie Lookup
   const handleLookup = async () => {
     if (!lookupQuery.trim()) return;
     setLookupLoading(true);
     setLookupResults([]);
     try {
-      const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&query=${encodeURIComponent(lookupQuery)}&pageSize=5`;
+      const url = `${USDA_URL}?api_key=${API_KEY}&query=${encodeURIComponent(lookupQuery)}&pageSize=5`;
       const response = await fetch(url);
       const data = await response.json();
       if (data.foods && data.foods.length > 0) {
@@ -157,11 +127,13 @@ export default function FoodDiaryScreen() {
     <SafeAreaView style={styles.container}>
       <FlatList
         data={dailyEntries}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View>
             <Text style={styles.title}>🍽️ Food Diary</Text>
+
+            {loading && <ActivityIndicator color="#5b2d8e" style={{ marginBottom: 12 }} />}
 
             {/* Calendar View */}
             <DiaryCalendar
@@ -169,7 +141,7 @@ export default function FoodDiaryScreen() {
               currentYear={currentYear}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
-              onSelectDate={setSelectedDate}
+              onSelectDate={(date) => dispatch(setSelectedDate(date))}
               selectedDate={selectedDate}
               datesWithEntries={datesWithEntries}
             />
@@ -257,10 +229,17 @@ export default function FoodDiaryScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <MealCard
-            item={item}
-            onDelete={() => dispatch(removeMeal({ id: item.id }))}
-          />
+          <View style={styles.card}>
+            <Text style={styles.cardMeal}>{item.mealName}</Text>
+            <Text style={styles.cardDetail}>🥗 {item.foodItem}</Text>
+            <Text style={styles.cardDetail}>🔥 {item.calories} calories</Text>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => dispatch(removeMealAPI(item._id))}
+            >
+              <Text style={styles.deleteText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         )}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No meals logged for this date.</Text>
@@ -322,7 +301,29 @@ const styles = StyleSheet.create({
     color: "#5b2d8e",
     marginBottom: 12,
   },
-
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e4d8f0",
+    shadowColor: "#3c0e5a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardMeal: { fontSize: 16, fontWeight: "700", color: "#1f8a5c", marginBottom: 4 },
+  cardDetail: { fontSize: 14, color: "#2d1050", marginBottom: 2 },
+  deleteButton: {
+    marginTop: 10,
+    backgroundColor: "#e74c3c",
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  deleteText: { color: "#ffffff", fontWeight: "600" },
   emptyText: { textAlign: "center", color: "#999", fontSize: 14, marginTop: 12 },
   lookupCard: {
     backgroundColor: "#ffffff",

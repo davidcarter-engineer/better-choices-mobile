@@ -18,18 +18,31 @@ import {
   Modal,
   View,
   Text,
+  Image,
   TouchableOpacity,
   SafeAreaView,
   StyleSheet,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useAuth } from "../context/AuthContext";
+import { useDispatch } from "react-redux";
+import { fetchFavorites, clearFavorites } from "../store/favoritesSlice";
 
 export default function HamburgerMenu({ navigation }) {
   const [menuVisible, setMenuVisible] = useState(false);
+  const { user, logout } = useAuth();
+  const dispatch = useDispatch();
 
   const handleNavigate = (screen) => {
     setMenuVisible(false);
     setTimeout(() => navigation.navigate(screen), 150);
+  };
+
+  const handleLogout = () => {
+    setMenuVisible(false);
+    logout();
+    dispatch(clearFavorites());
+    setTimeout(() => navigation.navigate("Home"), 150);
   };
 
   return (
@@ -127,6 +140,49 @@ export default function HamburgerMenu({ navigation }) {
               <Text style={styles.menuItemText}>⚙️ Settings</Text>
             </TouchableOpacity>
 
+            {/* Auth navigation */}
+            {user ? (
+              <>
+                <View style={styles.welcomeRow}>
+                  {user.profilePic ? (
+                    <Image source={{ uri: user.profilePic }} style={styles.navPic} />
+                  ) : null}
+                  <Text style={styles.welcomeText}>Welcome, {user.username}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleNavigate("Profile")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.menuItemText}>👤 Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.menuItem, styles.logoutItem]}
+                  onPress={handleLogout}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.menuItemText}>🚪 Sign Out</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleNavigate("Login")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.menuItemText}>🔐 Login</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleNavigate("Register")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.menuItemText}>📝 Sign Up</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setMenuVisible(false)}
@@ -194,5 +250,24 @@ const styles = StyleSheet.create({
     color: "#5b2d8e",
     fontSize: 16,
     fontWeight: "700",
+  },
+  welcomeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 10,
+  },
+  welcomeText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  navPic: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  logoutItem: {
+    backgroundColor: "#9b3a3a",
   },
 });

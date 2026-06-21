@@ -1,23 +1,38 @@
 /*
   --- SCREEN: FavoritesScreen ---
-  Displays saved favorites from Redux, matching the web application.
-  Favorites can come from restaurants or nutrition lookup.
+  Displays favorites fetched from the Better Choices API (MongoDB).
+  Favorites sync across web and mobile for the same user account.
 */
 
+import { useEffect } from "react";
 import {
   FlatList,
   View,
   Text,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
-import { removeFavorite } from "../store/favoritesSlice";
+import { fetchFavorites, removeFavoriteAPI } from "../store/favoritesSlice";
 
 export default function FavoritesScreen({ navigation }) {
-  const favorites = useSelector((state) => state.favorites.favorites);
   const dispatch = useDispatch();
+  const { favorites, loading } = useSelector((state) => state.favorites);
+
+  // Fetch favorites from the API on mount
+  useEffect(() => {
+    dispatch(fetchFavorites());
+  }, [dispatch]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color="#5b2d8e" style={{ marginTop: 40 }} />
+      </SafeAreaView>
+    );
+  }
 
   if (favorites.length === 0) {
     return (
@@ -37,7 +52,7 @@ export default function FavoritesScreen({ navigation }) {
       <Text style={styles.title}>⭐ My Favorites</Text>
       <FlatList
         data={favorites}
-        keyExtractor={(item) => item.id || item.name}
+        keyExtractor={(item) => item._id || item.name}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <View style={styles.card}>
@@ -48,21 +63,12 @@ export default function FavoritesScreen({ navigation }) {
             {item.calories !== undefined && (
               <Text style={styles.detail}>🔥 {item.calories} calories</Text>
             )}
-            {item.protein !== undefined && (
-              <Text style={styles.detail}>💪 Protein: {item.protein}g</Text>
-            )}
-            {item.carbs !== undefined && (
-              <Text style={styles.detail}>🍞 Carbs: {item.carbs}g</Text>
-            )}
-            {item.fat !== undefined && (
-              <Text style={styles.detail}>🧈 Fat: {item.fat}g</Text>
-            )}
             {item.healthyScore !== undefined && (
               <Text style={styles.detail}>⭐ Score: {item.healthyScore}/10</Text>
             )}
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() => dispatch(removeFavorite({ name: item.name }))}
+              onPress={() => dispatch(removeFavoriteAPI(item._id))}
             >
               <Text style={styles.removeText}>Remove</Text>
             </TouchableOpacity>

@@ -7,7 +7,7 @@
 
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
-import { addFavorite } from "../store/favoritesSlice";
+import { addFavoriteAPI } from "../store/favoritesSlice";
 
 export default function RestaurantDetailsScreen({ route }) {
   const { restaurant } = route.params;
@@ -19,11 +19,11 @@ export default function RestaurantDetailsScreen({ route }) {
 
   const handleSaveItem = (item) => {
     dispatch(
-      addFavorite({
-        id: `${restaurant.id}-${item.meal}`,
+      addFavoriteAPI({
         name: item.meal,
-        calories: item.calories,
         restaurant: restaurant.name,
+        healthyScore: restaurant.healthyScore,
+        calories: item.calories,
       })
     );
   };

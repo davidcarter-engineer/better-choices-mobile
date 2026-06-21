@@ -1,77 +1,135 @@
 /*
   --- SLICE: foodDiarySlice ---
-  Manages Food Diary state with persistent storage.
+  Manages Food Diary state backed by the Better Choices API (MongoDB).
+  Entries sync across web and mobile for the same user account.
 
-  --- AsyncStorage ---
-  AsyncStorage is React Native's key-value storage system (like localStorage
-  on the web). It persists data on the device between app sessions.
-  Data is stored as strings, so we JSON.stringify objects before saving
-  and JSON.parse them when loading.
-
-  --- Data Persistence ---
-  Every time entries change (add/remove), we save the full entries array
-  to AsyncStorage. When the app starts, we load saved entries using
-  the loadMeals action to restore previous data.
-
-  --- Redux Integration ---
-  The slice manages entries in Redux for real-time UI updates.
-  AsyncStorage is called as a side effect inside the reducers via
-  a helper function. We also use createAsyncThunk-style loading
-  via a loadMeals reducer that accepts pre-loaded data from the component.
-
-  --- Calendar Logic ---
-  Each entry includes a `date` field (YYYY-MM-DD string).
-  This allows filtering entries by date for the calendar view
-  and calculating daily totals for any selected date.
+  --- API Endpoints ---
+  GET    /api/diary       — fetch all entries for the user
+  GET    /api/diary/:date — fetch entries for a specific date
+  POST   /api/diary       — add a new entry
+  DELETE /api/diary/:id   — remove an entry
 */
 
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_BASE_URL } from "../config/api";
 
-const STORAGE_KEY = "better_choices_food_diary";
+async function getToken() {
+  return await AsyncStorage.getItem("token");
+}
 
-// Helper: save entries to AsyncStorage
-const saveToStorage = async (entries) => {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  } catch (error) {
-    console.warn("Failed to save to AsyncStorage:", error);
+// Fetch all diary entries for the authenticated user
+export const fetchDiaryEntries = createAsyncThunk(
+  "foodDiary/fetchEntries",
+  async (_, { rejectWithValue }) => {
+    const token = await getToken();
+    if (!token) return [];
+
+    console.log("[Diary] GET /api/diary");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/diary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      console.log("[Diary] GET response:", res.status);
+      if (!res.ok) return rejectWithValue(data.message);
+      return data;
+    } catch (err) {
+      console.log("[Diary] GET error:", err.message);
+      return rejectWithValue("Failed to fetch diary");
+    }
   }
-};
+);
+
+// Add a new diary entry
+export const addMealAPI = createAsyncThunk(
+  "foodDiary/addMeal",
+  async (mealData, { rejectWithValue }) => {
+    const token = await getToken();
+    if (!token) return rejectWithValue("Not authenticated");
+
+    console.log("[Diary] POST /api/diary", mealData);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/diary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(mealData),
+      });
+      const data = await res.json();
+      console.log("[Diary] POST response:", res.status);
+      if (!res.ok) return rejectWithValue(data.message);
+      return data;
+    } catch (err) {
+      console.log("[Diary] POST error:", err.message);
+      return rejectWithValue("Failed to save meal");
+    }
+  }
+);
+
+// Remove a diary entry
+export const removeMealAPI = createAsyncThunk(
+  "foodDiary/removeMeal",
+  async (id, { rejectWithValue }) => {
+    const token = await getToken();
+    if (!token) return rejectWithValue("Not authenticated");
+
+    console.log("[Diary] DELETE /api/diary/" + id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/diary/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      console.log("[Diary] DELETE response:", res.status);
+      if (!res.ok) return rejectWithValue(data.message);
+      return id;
+    } catch (err) {
+      console.log("[Diary] DELETE error:", err.message);
+      return rejectWithValue("Failed to remove meal");
+    }
+  }
+);
+
+const today = new Date().toISOString().split("T")[0];
 
 const foodDiarySlice = createSlice({
   name: "foodDiary",
   initialState: {
-    entries: [],
+    entries: [], // flat array of all entries from API
+    selectedDate: today,
+    loading: false,
   },
   reducers: {
-    // Load meals from AsyncStorage (called on app start)
-    loadMeals: (state, action) => {
-      state.entries = action.payload;
+    setSelectedDate(state, action) {
+      state.selectedDate = action.payload;
     },
-    // Add a meal entry with date, then persist
-    addMeal: (state, action) => {
-      state.entries.push(action.payload);
-      saveToStorage(state.entries);
+    clearDiary(state) {
+      state.entries = [];
     },
-    // Remove a meal by id, then persist
-    removeMeal: (state, action) => {
-      state.entries = state.entries.filter((e) => e.id !== action.payload.id);
-      saveToStorage(state.entries);
-    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchDiaryEntries.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchDiaryEntries.fulfilled, (state, action) => {
+        state.entries = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchDiaryEntries.rejected, (state) => {
+        state.loading = false;
+      })
+      .addCase(addMealAPI.fulfilled, (state, action) => {
+        state.entries.push(action.payload);
+      })
+      .addCase(removeMealAPI.fulfilled, (state, action) => {
+        state.entries = state.entries.filter((e) => e._id !== action.payload);
+      });
   },
 });
 
-export const { loadMeals, addMeal, removeMeal } = foodDiarySlice.actions;
+export const { setSelectedDate, clearDiary } = foodDiarySlice.actions;
 export default foodDiarySlice.reducer;
-
-// Helper: load entries from AsyncStorage (called from component)
-export const loadMealsFromStorage = async () => {
-  try {
-    const data = await AsyncStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (error) {
-    console.warn("Failed to load from AsyncStorage:", error);
-    return [];
-  }
-};

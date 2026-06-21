@@ -1,11 +1,9 @@
 /*
-  --- REDUX STORE ---
-  The store is the single source of truth for the entire app's state.
-  configureStore() from Redux Toolkit sets up the store with good defaults
-  (including Redux DevTools and thunk middleware).
-
-  We combine all slices (pieces of state) here. Currently we have one slice:
-  favoritesReducer, which manages the favorites array.
+  --- Redux Store ---
+  The store is the single source of truth for the app's state.
+  Matches the web application's store structure:
+    - state.favorites (API-backed, MongoDB)
+    - state.foodDiary (AsyncStorage, user-specific)
 */
 
 import { configureStore } from "@reduxjs/toolkit";

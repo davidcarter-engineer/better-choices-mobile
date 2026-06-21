@@ -26,7 +26,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
-import { addFavorite } from "../store/favoritesSlice";
+import { addFavoriteAPI } from "../store/favoritesSlice";
 
 const API_KEY = "DEMO_KEY";
 const API_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
@@ -122,13 +122,9 @@ export default function NutritionLookupScreen() {
 
   const handleSave = (food) => {
     dispatch(
-      addFavorite({
-        id: `nutrition-${food.name}`,
+      addFavoriteAPI({
         name: food.name,
         calories: food.calories,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
       })
     );
   };

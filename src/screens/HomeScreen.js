@@ -6,18 +6,30 @@
 
 import { useState, useEffect } from "react";
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useDispatch } from "react-redux";
 import Header from "../components/Header";
 import RestaurantCard from "../components/RestaurantCard";
 import Footer from "../components/Footer";
 import restaurants from "../data/restaurants";
+import { useAuth } from "../context/AuthContext";
+import { fetchFavorites } from "../store/favoritesSlice";
 
 export default function HomeScreen({ navigation }) {
   const [healthyPick, setHealthyPick] = useState(null);
+  const { user } = useAuth();
+  const dispatch = useDispatch();
 
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * restaurants.length);
     setHealthyPick(restaurants[randomIndex]);
   }, []);
+
+  // Fetch favorites from API when user is authenticated
+  useEffect(() => {
+    if (user) {
+      dispatch(fetchFavorites());
+    }
+  }, [user, dispatch]);
 
   return (
     <ScrollView style={styles.container}>
